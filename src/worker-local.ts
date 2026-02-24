@@ -7,28 +7,52 @@ import { writeExcel } from "./excel/writeExcel.js";
 
 async function main() {
   const inputDir = process.env.INPUT_DIR || path.resolve("invoices");
+  const outputDir = path.resolve("output");
   const outputXlsx =
-    process.env.OUTPUT_XLSX || path.resolve("output/facturas.xlsx");
+    process.env.OUTPUT_XLSX || path.join(outputDir, "facturas.xlsx");
 
-  if (!fs.existsSync(inputDir))
-    throw new Error(`No existe la carpeta: ${inputDir}`);
+  // Crear carpeta invoices si no existe
+  if (!fs.existsSync(inputDir)) {
+    console.log(
+      "📂 Carpeta 'invoices' no encontrada. Creándola automáticamente...",
+    );
+    fs.mkdirSync(inputDir, { recursive: true });
+    console.log(
+      "👉 Agregá tus facturas PDF dentro de ./invoices y volvé a ejecutar el script.",
+    );
+    return;
+  }
+
+  // Crear carpeta output si no existe
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
+  }
 
   const files = fs
     .readdirSync(inputDir)
     .filter((f) => f.toLowerCase().endsWith(".pdf"));
-  console.log(`Encontré ${files.length} PDFs en ${inputDir}`);
+
+  if (files.length === 0) {
+    console.log("⚠️ No se encontraron archivos PDF en la carpeta 'invoices'.");
+    console.log("👉 Agregá al menos una factura PDF y ejecutá nuevamente.");
+    return;
+  }
+
+  console.log(`📄 Encontré ${files.length} PDFs en ${inputDir}`);
 
   const results = [];
+
   for (const f of files) {
     const full = path.join(inputDir, f);
-    console.log(`Procesando: ${f}`);
+    console.log(`🔍 Procesando: ${f}`);
+
     try {
       const buffer = fs.readFileSync(full);
       const text = await extractTextFromPdf(buffer);
       const parsed = parseInvoiceFromText(text, f);
       results.push(parsed);
     } catch (e: any) {
-      console.error("ERROR REAL:", e);
+      console.error("❌ ERROR REAL:", e);
       results.push({
         fileName: f,
         status: "ERROR",
@@ -38,10 +62,10 @@ async function main() {
   }
 
   await writeExcel(outputXlsx, results as any);
-  console.log(`Excel generado en: ${outputXlsx}`);
+  console.log(`✅ Excel generado en: ${outputXlsx}`);
 }
 
 main().catch((e) => {
-  console.error(e);
+  console.error("❌ Error fatal:", e);
   process.exit(1);
 });
