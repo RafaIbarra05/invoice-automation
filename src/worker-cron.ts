@@ -3,6 +3,7 @@ import path from "node:path";
 import fs from "node:fs";
 import {
   listPdfsInFolder,
+  listSubfolders, // ← agregar este import
   downloadFile,
   uploadExcel,
   loadProcessedIds,
@@ -12,12 +13,10 @@ import { extractTextFromPdf } from "./extract/pdfText.js";
 import { parseInvoiceFromText } from "./extract/parseInvoice.js";
 import { writeExcel } from "./excel/writeExcel.js";
 
-const FOLDER_ID = process.env.DRIVE_FOLDER_ID!;
+const ROOT_FOLDER_ID = process.env.DRIVE_FOLDER_ID!; // ← renombrado
 const OUTPUT_XLSX =
   process.env.OUTPUT_XLSX || path.resolve("output/facturas.xlsx");
-const EXCEL_DRIVE_NAME = "facturas.xlsx";
 
-// Intervalo en horas (por defecto cada 6 horas)
 const INTERVAL_HOURS = Number(process.env.CRON_INTERVAL_HOURS ?? 6);
 const INTERVAL_MS = INTERVAL_HOURS * 60 * 60 * 1000;
 
@@ -27,10 +26,24 @@ async function runPipeline() {
   });
   console.log(`\n⏰ [${now}] Iniciando pipeline...`);
 
-  if (!FOLDER_ID) {
+  if (!ROOT_FOLDER_ID) {
     console.error("❌ Falta variable de entorno DRIVE_FOLDER_ID");
     return;
   }
+
+  // ← NUEVO: detectar subcarpeta semanal más reciente
+  const subfolders = await listSubfolders(ROOT_FOLDER_ID);
+  if (subfolders.length === 0) {
+    console.log("📁 No hay carpetas semanales todavía. Nada que procesar.");
+    return;
+  }
+  const currentFolder = subfolders[0];
+  if (!currentFolder) {
+    console.log("📁 No hay carpetas semanales todavía. Nada que procesar.");
+    return;
+  }
+  console.log(`📁 Carpeta activa: ${currentFolder.name}`);
+  const FOLDER_ID = currentFolder.id; // ← usa la carpeta de la semana
 
   // 1. Cargar ids ya procesados
   const processedIds = await loadProcessedIds(FOLDER_ID);
@@ -49,7 +62,6 @@ async function runPipeline() {
 
   // 3. Procesar cada PDF nuevo
   const results = [];
-
   for (const file of newFiles) {
     console.log(`🔍 Procesando: ${file.name}`);
     try {
@@ -65,7 +77,6 @@ async function runPipeline() {
         status: "ERROR" as const,
         errores: [e?.message ?? String(e)],
       });
-      // Igual marcamos como procesado para no reintentar indefinidamente
       processedIds.add(file.id);
     }
   }
@@ -76,23 +87,18 @@ async function runPipeline() {
   await writeExcel(OUTPUT_XLSX, results as any);
   console.log(`📊 Excel generado localmente: ${OUTPUT_XLSX}`);
 
-  // 5. Subir Excel a Drive
+  // 5. Subir Excel a la misma carpeta semanal  ← CAMBIO
   const excelBuffer = fs.readFileSync(OUTPUT_XLSX);
-  await uploadExcel(
-    process.env.DRIVE_OUTPUT_FOLDER_ID!,
-    EXCEL_DRIVE_NAME,
-    excelBuffer,
-  );
-  // 6. Guardar tracking actualizado
+  const excelName = `facturas_${currentFolder.name}.xlsx`; // ← nombre único por semana
+  await uploadExcel(FOLDER_ID, excelName, excelBuffer);
+
+  // 6. Guardar tracking
   await saveProcessedIds(FOLDER_ID, processedIds);
 
   console.log(`✅ Pipeline completado. ${results.length} facturas procesadas.`);
 }
 
-// Ejecutar inmediatamente al arrancar
 runPipeline().catch((e) => console.error("❌ Error fatal:", e));
-
-// Luego repetir cada INTERVAL_HOURS horas
 setInterval(() => {
   runPipeline().catch((e) => console.error("❌ Error fatal en cron:", e));
 }, INTERVAL_MS);

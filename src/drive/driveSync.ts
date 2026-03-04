@@ -121,3 +121,18 @@ export async function saveProcessedIds(
     });
   }
 }
+
+export async function listSubfolders(
+  parentFolderId: string,
+): Promise<{ id: string; name: string }[]> {
+  const drive = getDriveClient();
+  const res = await drive.files.list({
+    q: `'${parentFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+    fields: "files(id, name)",
+    orderBy: "name desc",
+    pageSize: 50,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  });
+  return (res.data.files ?? []) as { id: string; name: string }[];
+}
