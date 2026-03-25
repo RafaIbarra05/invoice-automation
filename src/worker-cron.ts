@@ -52,7 +52,11 @@ async function runPipeline() {
     console.log("📁 No hay carpetas semanales todavía. Nada que procesar.");
     return;
   }
-  const currentFolder = subfolders[0];
+
+  /*  const currentFolder = subfolders[0]; */
+  const currentFolder =
+    subfolders.find((f) => f.name === "2026-semana-09") ?? subfolders[0];
+
   console.log(`📁 Carpeta activa: ${currentFolder.name}`);
   const FOLDER_ID = currentFolder.id;
 
