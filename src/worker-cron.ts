@@ -57,7 +57,8 @@ async function runPipeline() {
   const FOLDER_ID = currentFolder.id;
 
   // 3. Cargar ids ya procesados
-  const processedIds = await loadProcessedIds(FOLDER_ID);
+  /* const processedIds = await loadProcessedIds(FOLDER_ID); */
+  const processedIds = new Set<string>();
   console.log(`📋 IDs ya procesados: ${processedIds.size}`);
 
   // 4. Listar PDFs nuevos
