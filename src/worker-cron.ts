@@ -53,16 +53,14 @@ async function runPipeline() {
     return;
   }
 
-  /*  const currentFolder = subfolders[0]; */
-  const currentFolder =
-    subfolders.find((f) => f.name === "2026-semana-09") ?? subfolders[0];
+  const currentFolder = subfolders[0];
 
   console.log(`📁 Carpeta activa: ${currentFolder.name}`);
   const FOLDER_ID = currentFolder.id;
 
   // 3. Cargar ids ya procesados
-  /* const processedIds = await loadProcessedIds(FOLDER_ID); */
-  const processedIds = new Set<string>();
+  const processedIds = await loadProcessedIds(FOLDER_ID);
+
   console.log(`📋 IDs ya procesados: ${processedIds.size}`);
 
   // 4. Listar PDFs nuevos
