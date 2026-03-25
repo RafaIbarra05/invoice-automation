@@ -18,6 +18,14 @@ export interface InvoiceExtractionResult {
   retenciones?: string; // texto o monto
   iva?: string; // texto o monto
 
+  // ── Datos enriquecidos desde el Glosario Maestro ──
+  contactoOdoo?: string; // Nombre del proveedor en Odoo
+  cuentaContable?: string; // Cuenta contable asignada
+  productoOdoo?: string; // Producto en Odoo (puede ser múltiple para variables)
+  ivaOdoo?: string; // Alícuota de IVA según Odoo
+  impuestosIdExterno?: string; // ID externo del impuesto en Odoo
+  enGlosario?: boolean; // true si se encontró en el glosario
+
   status: ExtractionStatus;
   errores: string[];
 

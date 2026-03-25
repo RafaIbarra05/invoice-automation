@@ -30,22 +30,18 @@ export async function uploadExcel(
   localBuffer: Buffer,
 ): Promise<void> {
   const drive = getDriveClient();
-
   const existing = await drive.files.list({
     q: `'${folderId}' in parents and name='${fileName}' and trashed=false`,
     fields: "files(id)",
     supportsAllDrives: true,
     includeItemsFromAllDrives: true,
   });
-
   const media = {
     mimeType:
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     body: Readable.from(localBuffer),
   };
-
   const existingId = existing.data.files?.[0]?.id;
-
   if (existingId) {
     await drive.files.update({
       fileId: existingId,
@@ -66,17 +62,14 @@ export async function uploadExcel(
 export async function loadProcessedIds(folderId: string): Promise<Set<string>> {
   const drive = getDriveClient();
   const TRACKING_FILE = ".processed_ids.json";
-
   const res = await drive.files.list({
     q: `'${folderId}' in parents and name='${TRACKING_FILE}' and trashed=false`,
     fields: "files(id)",
     supportsAllDrives: true,
     includeItemsFromAllDrives: true,
   });
-
   const fileId = res.data.files?.[0]?.id;
   if (!fileId) return new Set();
-
   try {
     const content = await drive.files.get(
       { fileId, alt: "media", supportsAllDrives: true },
@@ -96,17 +89,14 @@ export async function saveProcessedIds(
   const drive = getDriveClient();
   const TRACKING_FILE = ".processed_ids.json";
   const buffer = Buffer.from(JSON.stringify([...ids], null, 2), "utf-8");
-
   const existing = await drive.files.list({
     q: `'${folderId}' in parents and name='${TRACKING_FILE}' and trashed=false`,
     fields: "files(id)",
     supportsAllDrives: true,
     includeItemsFromAllDrives: true,
   });
-
   const media = { mimeType: "application/json", body: Readable.from(buffer) };
   const existingId = existing.data.files?.[0]?.id;
-
   if (existingId) {
     await drive.files.update({
       fileId: existingId,
@@ -135,4 +125,32 @@ export async function listSubfolders(
     includeItemsFromAllDrives: true,
   });
   return (res.data.files ?? []) as { id: string; name: string }[];
+}
+
+/**
+ * Busca y descarga el Glosario Maestro desde la raíz de la unidad compartida.
+ * Retorna null si no lo encuentra.
+ */
+export async function downloadGlosario(
+  rootFolderId: string,
+  fileName = "GLOSARIO_MAESTRO_PuraFrutta.xlsx",
+): Promise<Buffer | null> {
+  const drive = getDriveClient();
+  const res = await drive.files.list({
+    q: `'${rootFolderId}' in parents and name='${fileName}' and trashed=false`,
+    fields: "files(id, name)",
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  });
+  const fileId = res.data.files?.[0]?.id;
+  if (!fileId) {
+    console.warn(`⚠️ Glosario no encontrado en Drive: ${fileName}`);
+    return null;
+  }
+  const file = await drive.files.get(
+    { fileId, alt: "media", supportsAllDrives: true },
+    { responseType: "arraybuffer" },
+  );
+  console.log(`📥 Glosario descargado: ${fileName}`);
+  return Buffer.from(file.data as ArrayBuffer);
 }
