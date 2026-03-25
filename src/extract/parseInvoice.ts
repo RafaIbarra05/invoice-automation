@@ -120,6 +120,38 @@ function detectTipoFactura(text: string): string | undefined {
 }
 
 /**
+ * FIX TETRAPAK: Detecta CUIT en formato "C.U.I.T. N°.: 30-58912328-6"
+ */
+function extractCuitTetrapak(text: string): string | undefined {
+  // Formato: C.U.I.T. N°.: 30-58912328-6
+  const m = text.match(/C\.U\.I\.T\.?\s*N[°º]\.?:?\s*([\d\-]{11,14})/i);
+  if (!m) return undefined;
+  const normalized = normalizeCuit(m[1]);
+  if (normalized && RECEPTOR_CUITS.has(normalized)) return undefined;
+  return normalized;
+}
+
+/**
+ * FIX TETRAPAK: Detecta razón social "Tetra Pak S.R.L." del bloque inicial.
+ */
+function extractRazonSocialTetrapak(text: string): string | undefined {
+  const m = text.match(/^(Tetra\s+Pak[^\n\r]+)/im);
+  return m?.[1]?.trim();
+}
+
+/**
+ * FIX TETRAPAK: Número con espacio "0055- 00144881" → "0055-00144881"
+ */
+function detectNumeroTetrapak(text: string): string | undefined {
+  const m = text.match(/Factura\s+N[°º\.]\s*[\.\s]*(\d{4})-\s*(\d{8})/i);
+  if (m) return `${m[1]}-${m[2]}`;
+  // "A Factura Nº . 0055- 00144881"
+  const m2 = text.match(/Factura\s+N[°º][\s\.]*(\d{4})-\s*(\d{6,8})/i);
+  if (m2) return `${m2[1].padStart(4, "0")}-${m2[2].padStart(8, "0")}`;
+  return undefined;
+}
+
+/**
  * FIX 2 + FIX 3: Detección de emisor mejorada.
  * - Penaliza fuertemente los CUITs del receptor (Pura Frutta / Patagonia Beverage)
  * - Soporta formato "Comp. Nro: 00002   00000545" para número de factura
@@ -246,9 +278,13 @@ export function parseInvoiceFromText(
   // FIX 1: Si no se detectó CUIT por contexto, intentar desde el nombre del archivo
   const cuitFromFile = extractCuitFromFileName(fileName);
 
+  // FIX TETRAPAK: fallback con formato N°.:
+  const cuitTetrapak = extractCuitTetrapak(text);
+
   const cuit =
     emisor.cuit ||
     cuitFromFile ||
+    cuitTetrapak ||
     normalizeCuit(
       firstGroup(
         /C\.?U\.?I\.?T\.?(?:\s*Nro\.)?[:\s]*([0-9\-\. ]{11,16})/i,
@@ -261,6 +297,7 @@ export function parseInvoiceFromText(
 
   const razonSocial =
     emisor.razonSocial ||
+    extractRazonSocialTetrapak(text) ||
     firstGroup(/Raz[oó]n Social[:\s]*([^\n\r]+)/i, text) ||
     firstGroup(/Emisor[:\s]*([^\n\r]+)/i, text) ||
     firstGroup(
@@ -270,8 +307,8 @@ export function parseInvoiceFromText(
 
   const tipoFactura = detectTipoFactura(text);
 
-  // FIX 2: Número y fecha con detección mejorada
-  const numeroFactura = detectNumeroFactura(text);
+  // FIX 2 + TETRAPAK: Número y fecha con detección mejorada
+  const numeroFactura = detectNumeroFactura(text) || detectNumeroTetrapak(text);
   const fechaEmision = detectFechaEmision(text);
 
   const moneda = detectCurrency(text);
