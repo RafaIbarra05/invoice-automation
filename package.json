@@ -15,6 +15,7 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.88.0",
     "dotenv": "^17.3.1",
     "exceljs": "^4.4.0",
     "googleapis": "^171.4.0",

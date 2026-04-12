@@ -18,12 +18,14 @@ import {
   lookupByCuit,
   getProductosVariables,
 } from "./glosario/lookUpGlosario.js";
+import { enrichWithAI, getMissingFields } from "./ai/invoiceAI.js";
 
 const ROOT_FOLDER_ID = process.env.DRIVE_FOLDER_ID!;
 const OUTPUT_XLSX =
   process.env.OUTPUT_XLSX || path.resolve("output/facturas.xlsx");
 const INTERVAL_HOURS = Number(process.env.CRON_INTERVAL_HOURS ?? 6);
 const INTERVAL_MS = INTERVAL_HOURS * 60 * 60 * 1000;
+const USE_AI = process.env.USE_AI !== "false"; // activo por defecto, desactivar con USE_AI=false
 
 async function runPipeline() {
   const now = new Date().toLocaleString("es-AR", {
@@ -54,14 +56,13 @@ async function runPipeline() {
   }
 
   const currentFolder = subfolders[0];
-
   console.log(`📁 Carpeta activa: ${currentFolder.name}`);
   const FOLDER_ID = currentFolder.id;
 
   // 3. Cargar ids ya procesados
-  const processedIds = await loadProcessedIds(FOLDER_ID);
-
-  console.log(`📋 IDs ya procesados: ${processedIds.size}`);
+  /*   const processedIds = await loadProcessedIds(FOLDER_ID);
+  console.log(`📋 IDs ya procesados: ${processedIds.size}`); */
+  const processedIds = new Set<string>();
 
   // 4. Listar PDFs nuevos
   const allFiles = await listPdfsInFolder(FOLDER_ID);
@@ -74,8 +75,10 @@ async function runPipeline() {
 
   console.log(`📄 Facturas nuevas encontradas: ${newFiles.length}`);
 
-  // 5. Procesar cada PDF y enriquecer con glosario
+  // 5. Procesar cada PDF
   const results = [];
+  let aiEnriched = 0;
+
   for (const file of newFiles) {
     console.log(`🔍 Procesando: ${file.name}`);
     try {
@@ -83,7 +86,30 @@ async function runPipeline() {
       const text = await extractTextFromPdf(buffer);
       const parsed = parseInvoiceFromText(text, file.name);
 
-      // Enriquecer con Glosario Maestro
+      // ── AI FALLBACK ──
+      if (USE_AI && getMissingFields(parsed).length > 0) {
+        const aiResult = await enrichWithAI(text, parsed);
+        const aiFields = Object.keys(aiResult);
+        if (aiFields.length > 0) {
+          Object.assign(parsed, aiResult);
+          aiEnriched++;
+          console.log(`  🤖 IA completó: ${aiFields.join(", ")}`);
+
+          // Recalcular status con los nuevos campos
+          const required = [
+            "razonSocial",
+            "cuit",
+            "tipoFactura",
+            "numeroFactura",
+            "fechaEmision",
+          ];
+          const stillMissing = required.filter((k) => !(parsed as any)[k]);
+          if (stillMissing.length === 0) parsed.status = "OK";
+          else if (stillMissing.length < 3) parsed.status = "NEEDS_REVIEW";
+        }
+      }
+
+      // ── ENRIQUECIMIENTO CON GLOSARIO ──
       if (parsed.cuit) {
         const entry = lookupByCuit(parsed.cuit);
         if (entry) {
@@ -153,7 +179,7 @@ async function runPipeline() {
 
   const enGlosario = results.filter((r: any) => r.enGlosario).length;
   console.log(
-    `✅ Pipeline completado. ${results.length} facturas procesadas. ${enGlosario}/${results.length} encontradas en glosario.`,
+    `✅ Pipeline completado. ${results.length} facturas procesadas. ${enGlosario}/${results.length} en glosario. 🤖 IA completó ${aiEnriched} facturas.`,
   );
 }
 
