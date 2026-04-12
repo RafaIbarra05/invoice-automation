@@ -57,12 +57,12 @@ async function runPipeline() {
 
   const currentFolder = subfolders[0];
   console.log(`📁 Carpeta activa: ${currentFolder.name}`);
+
   const FOLDER_ID = currentFolder.id;
 
   // 3. Cargar ids ya procesados
-  /*   const processedIds = await loadProcessedIds(FOLDER_ID);
-  console.log(`📋 IDs ya procesados: ${processedIds.size}`); */
-  const processedIds = new Set<string>();
+  const processedIds = await loadProcessedIds(FOLDER_ID);
+  console.log(`📋 IDs ya procesados: ${processedIds.size}`);
 
   // 4. Listar PDFs nuevos
   const allFiles = await listPdfsInFolder(FOLDER_ID);
